@@ -1,6 +1,6 @@
 # ACLI sub-module
 package AcliPm::SerialPort;
-our $Version = "1.01";
+our $Version = "1.02";
 
 use strict;
 use warnings;
@@ -36,9 +36,16 @@ sub readSerialPorts { # Read in available serial ports on this machine
 	@$serialData = ();	# Clear it
 	if ($^O eq 'MSWin32') { # On Windows we use WMIC
 		my %comPort;
-		my $tasklist = `wmic path win32_pnpentity get caption /format:list`;
-		while ($tasklist =~ /^Caption=(.+)\(COM(\d+)\)[\x00\r]$/gm) {
+		# First try new Powershell aproach; https://techcommunity.microsoft.com/blog/windows-itpro-blog/wmi-command-line-wmic-utility-deprecation-next-steps/4039242
+		my $tasklist = `powershell -Command "Get-WMIObject Win32_PnPEntity | where {\$_.Caption -clike '*(COM*'} | Format-Table Caption"`;
+		while ($tasklist =~ /^(.+)\(COM(\d+)\)\s*$/gm) {
 			$comPort{"COM$2"} = $1;
+		}
+		unless (%comPort) { # If that didn't work, try the old WMIC approach
+			$tasklist = `wmic path win32_pnpentity get caption /format:list`;
+			while ($tasklist =~ /^Caption=(.+)\(COM(\d+)\)[\x00\r]$/gm) {
+				$comPort{"COM$2"} = $1;
+			}
 		}
 		foreach my $com (sort {$a cmp $b } keys %comPort) { # Arrange in COM-X order
 			push(@$serialData, [$com, $comPort{$com}]);

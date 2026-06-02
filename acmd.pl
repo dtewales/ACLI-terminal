@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-my $Version = "1.08";
+my $Version = "1.09";
 
 # Written by Ludovico Stevens (lstevens@extremenetworks.com)
 # Bulk CLI Command tool for Extreme Networks devices
@@ -24,6 +24,8 @@ my $Version = "1.08";
 # 1.07	- Password prompt was asking always for username "rwa" even if a different username was specified
 #	- Made changes so it can work even with a "generic" host which is not an Extreme Networks switch
 # 1.08	- Changed loadHosts to work with batch files using start instead of acligui.vbs
+# 1.09	- Spreadsheet -x option column label names are now case sensitive
+
 
 #############################
 # STANDARD MODULES          #
@@ -502,16 +504,16 @@ sub readSpreadsheet { # Reads in spreadsheet and populates supplied hash referen
 	my $index;
 	my $columns = $#{$rows[$minRow-1]};
 	for my $i (0 .. $#{$rows[$minRow-1]}) {
-		next unless lc($rows[$minRow-1][$i]) eq lc($ipColumnName);
+		next unless $rows[$minRow-1][$i] eq $ipColumnName;
 		$index = $i; # Holds the column index of the designated switch IP column
 	}
-	quit(1, "Did not find column labeled '$ipColumnName' in spreadsheet '$filename'") unless defined $index;
+	quit(1, "Did not find column labeled '$ipColumnName' in spreadsheet '$filename' (note case-sensitive)") unless defined $index;
 	foreach my $i ($minRow .. $#rows) {
 		next unless length $rows[$i][$index]; # Skip rows with no switch ip/hostname
 		foreach my $j (0 .. $columns) {
 			my $value = $rows[$i][$j];
 			$value = '"'.$value.'"' if $value =~ /\s/ && $value !~ /^\"[^\"]+\"$/; # Quote value if it contains spaces
-			$sheetTable{$rows[$i][$index]}{lc $rows[$minRow-1][$j]} = $value;
+			$sheetTable{$rows[$i][$index]}{$rows[$minRow-1][$j]} = $value;
 		}
 	}
 	return (\%sheetTable, $rows[$minRow-1]);
@@ -524,7 +526,7 @@ sub validateUsedVariables { # Validate that there are no $variables in CLI scrip
 		$doubleDollar = 1 if $command =~ /\$\$$VarDelim/;
 		my @matches = ($command =~ /\$($VarNormal)$VarDelim/g);
 		for my $match (@matches) {
-			$varHash{lc $match} = 1; # Hash avoids duplicates
+			$varHash{$match} = 1; # Hash avoids duplicates
 		}
 	}
 	if ($doubleDollar && !scalar values %$hostNames) {
@@ -533,10 +535,10 @@ sub validateUsedVariables { # Validate that there are no $variables in CLI scrip
 	if (%varHash) {
 		quit(1, "Variables present in CLI script but no spreadsheet loaded") unless defined $spreadsheet;
 		for my $label (@$labelRow) {
-			delete $varHash{lc $label} if exists $varHash{lc $label};
+			delete $varHash{$label} if exists $varHash{$label};
 		}
 		if (%varHash) { # If any keys left...
-			quit(1, "Variables used in the CLI script but not found in the spreadsheet: " . join(',', keys %varHash) . "\n");
+			quit(1, "Variables used in the CLI script but not found in the spreadsheet (note case-sensitive): " . join(',', keys %varHash) . "\n");
 		}
 	}
 }
@@ -576,7 +578,7 @@ sub replaceVariables { # Replaces variables in the command lines
 	my ($host, $cmdRef, $familyType, $switchName, $vars) = @_;
 
 	# Dereference $variables
-	$$cmdRef =~ s/\$($VarNormal)$VarDelim/defined $vars->{lc $1} ? $vars->{lc $1} : "\$$1"/geo;
+	$$cmdRef =~ s/\$($VarNormal)$VarDelim/defined $vars->{$1} ? $vars->{$1} : "\$$1"/geo;
 	# Dereference $$ variable (name from -f hosts file)
 	$$cmdRef =~ s/\$\$$VarDelim/defined $switchName ? $switchName : '$$'/geo;
 	if ($$cmdRef =~ /\$\$$VarDelim/ || $$cmdRef =~ /\$($VarNormal)$VarDelim/) {

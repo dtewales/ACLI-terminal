@@ -1,6 +1,8 @@
 # acli.pl alias file
 #
-$Version = 1.67
+$Version = 1.68
+#
+# This file was edited with Tab = 8 space characters; set to same on your editor for better viewing
 #
 # This file should be placed either in the same directory as acli.pl or else in your home directory (ENV paths HOME & USERPROFILE are checked)
 # If the file is present in multiple paths the order of preference is the following:
@@ -109,7 +111,6 @@ $Version = 1.67
 #	If this happens, it is possible to force a command to the switch (without de-aliasing) by appending ';' to the command
 #	Alternatively include a condition match to avoid the clash using the &noalias instruction
 #
-# This file was edited with Tab = 8 space characters; set to same on your editor for better viewing
 
 
 #
@@ -1386,7 +1387,6 @@ bgn [$vrf]
 											; netstat -tnap
 											; @error enable
 											; @echo on
-
 bgr [$vrf]
 	~:"Show BGP routes for a given VRF or GRT"
 	{family_type} eq 'PassportERS' && $vrf =~ /^\d+$/				= show ip bgp route [vrfids $vrf]
@@ -1406,6 +1406,28 @@ bgr [$vrf]
 											; @endfor
 											; @error enable
 											; @echo on
+bgs [$vrf]
+	~:"Show BGP Summary for a given VRF or GRT"
+	{family_type} eq 'PassportERS' && $vrf =~ /^\d+$/				= show ip bgp summary [vrfids $vrf]
+	{family_type} eq 'PassportERS'							= show ip bgp summary [vrf $vrf]
+upbgn $bgpeer [$vrf]
+	~:"Enables an existing BGP peer for a given VRF or in the GRT"
+	{is_voss} && $vrf								= config term; router vrf [$vrf]; ip bgp neighbor [$bgpeer] enable; exit; show ip bgp summary [vrf $vrf]|STATE,^\d,---,- [\dI]!metric
+	{is_voss}									= config term; router bgp; neighbor [$bgpeer] enable; exit; show ip bgp summary |STATE,^\d,---,- [\dI]!metric		
+dnbgn $bgpeer [$vrf]
+	~:"Disables an existing BGP peer for a given VRF or in the GRT"
+	{is_voss} && $vrf								= config term; router vrf [$vrf]; no ip bgp neighbor [$bgpeer] enable; exit; show ip bgp summary [vrf $vrf]|STATE,^\d,---,- [\dI]!metric
+	{is_voss} 									= config term; router bgp; no neighbor [$bgpeer] enable; exit; show ip bgp summary |STATE,^\d,---,- [\dI]!metric
+bouncebgn $bgpeer [$vrf]
+	~:"Bounces an existing BGP peer for a given VRF or in the GRT"
+	{is_voss} && $vrf								= config term; router vrf [$vrf]; no ip bgp neighbor [$bgpeer] enable; @sleep 2; ip bgp neighbor [$bgpeer] enable;exit; show ip bgp summary [vrf $vrf]|STATE,^\d,---,- [\dI]!metric
+	{is_voss} 									= config term; router bgp; no neighbor [$bgpeer] enable; @sleep 2; neighbor [$bgpeer] enable; exit; show ip bgp summary |STATE,^\d,---,- [\dI]!metric
+bgnrad $bgpeer [$vrf]
+	~:"Show advertisied routes from a specific bgp neighbor in a specific VRF or the GRT"	
+	{is_voss}									= show ip bgp neighbor [$bgpeer] advertised-route [vrf $vrf]
+bgnrrx $bgpeer [$vrf]
+	~:"Show received routes from a specific bgp neighbor in a specific VRF or in the GRT"	
+	{is_voss}									= show ip bgp neighbor [$bgpeer] route [vrf $vrf]
 
 ipff [$slots]
 	~:"Show IPFIX flows"

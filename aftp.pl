@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-my $Version = "1.13";
+my $Version = "1.14";
 
 # Written by Ludovico Stevens (lstevens@extremenetworks.com)
 # FTP, SFTP client for Extreme VOSS devices
@@ -34,6 +34,12 @@ my $Version = "1.13";
 # 1.11	- Added support and new syntax for reading in IPs from spreadsheet (as in acmd)
 # 1.12	- Changed loadHosts to work with batch files using start instead of acligui.vbs
 # 1.13	- Adjusted tabulation on syntax output
+# 1.14	- Spreadsheet -x option can now also be used to rename files as they are downloaded from the
+#	  device (get) and to fetch those renamed files when re-uploading them to the same device
+#	  using the same original name (put); for this it is sufficient to prepend to the provided
+#	  filename(s)/glob(s) a bang (!) character: !<filename/glob>
+#	- Spreadsheet -x option column label names are now case sensitive
+#	- Added -v option to provide verbose output where the files being transferred are renamed
 
 
 #############################
@@ -84,7 +90,7 @@ my %Thread = ( # Name the thread methods
 	ftp	=> 'ftpThread',
 	sftp	=> 'sftpThread',
 );
-our ($opt_f, $opt_d, $opt_p, $opt_l, $opt_x);
+our ($opt_f, $opt_d, $opt_p, $opt_l, $opt_x, $opt_v);
 
 
 #############################
@@ -97,28 +103,36 @@ sub printSyntax {
 	print " When GETting the same file from many devices, prepends device hostname/IP to filename\n";
 	print " When PUTting the same file back to many devices, only specify the file without prepend\n";
 	print "\nUsage:\n";
-	print " $ScriptName [-l <user>] [-p <path>] <host/IP/list> [<ftp|sftp>] <get|put> <file-list/glob>\n";
-	print " $ScriptName -f <hostfile> [-l <user>] [-p <path>] [<ftp|sftp>] <get|put> <file-list/glob>\n";
-	print " $ScriptName -x <spreadsheet>[:<sheetname>]!<column-label> [-l <user>] [-p <path>] [<ftp|sftp>] <get|put> <file-list/glob>\n\n";
+	print " $ScriptName [-v] [-l <user>] [-p <path>] <host/IP/list> [<ftp|sftp>] <get|put> <file-list/glob>\n";
+	print " $ScriptName [-v] -f <hostfile> [-l <user>] [-p <path>] [<ftp|sftp>] <get|put> <file-list/glob>\n";
+	print " $ScriptName [-v] -x <spreadsheet>[:<sheetname>]!<column-label> [-l <user>] [-p <path>] [<ftp|sftp>] <get|put> [!]<file-list/glob>\n\n";
 	print " -f <hostfile>     : File containing a list of hostnames/IPs to connect to; valid lines:\n";
 	print "                   :   <IP/hostname>         [<unused-display-name>] [# Comments]\n";
 	print "                   :  [<IP/hostname>]:<port> [<unused-display-name>] [# Comments]\n";
 	print " -l <user>[:<pwd>] : Use non-default credentials; password will be prompted if not provided\n";
 	print " -p <path>         : Path on device\n";
-	print " -x <spreadsheet> [:<sheetname>]!<column-label>  : Spreadsheet file (Microsoft Excel, OpenOffice, CSV)\n";
+	print " -x <spreadsheet>[:<sheetname>]!<column-label> : Spreadsheet file (Microsoft Excel, OpenOffice, CSV)\n";
 	print "                     Spreadsheet must be a simple table where every row is a device with a number\n";
 	print "                     of parameters. The first row of the table must be a label for the column values.\n";
 	print "                     The label corresponding to the column with the switch IP/hostnames must be\n";
 	print "                     supplied in <column-label>.\n";
 	print "                     The <sheetname> is optional; if not supplied the first sheet of the spreadsheet\n";
 	print "                     will be used\n";
+	print " -v                : Verbose output where transfered files are renamed to destination\n";
 	print " <host/IP list>    : List of hostnames or IP addresses\n";
 	print "                   : Note that valid IP lists can be written as: 192.168.10.1-10,40-45,51\n";
 	print "                   : IPv6 addresses are also supported: 2000:10::1-10 (decimal range 1-10)\n";
 	print "                   : 2000:20::01-10 (hex range 1,2,3,4,5,6,7,8,9,a,b,c,d,e,f,10)\n";
 	print " <ftp|sftp>        : Protocol to use; if omitted will default to FTP\n";
 	print " <get|put>         : Whether we get files from device, or we put files to it\n";
-	print " <file-list/glob>  : Filename or glob matching multiple files or space separated list\n";
+	print " <file-list/glob>  : Filename or glob matching multiple files or space separated list. If the -x option\n";
+	print "                     is in use, this input can be optionally pre-pended with a bang (!) character\n";
+	print "                     - !<file-list/glob> - so that fetched files (get) are renamed based on filename\n";
+	print "                     mapping from spreadsheet; for example, file config.cfg is looked up in the\n";
+	print "                     spreadsheet where it is mapped to <device-name>.cfg; and in reverse those same\n";
+	print "                     mapped filenames when uploaded (put) are restored to the original filename on the\n";
+	print "                     device; so when uploading config.cfg to the device, local file <device-name>.cfg\n";
+	print "                     will be fetched and transferred to the device as config.cfg\n";
 	exit 1;
 }
 
@@ -402,16 +416,16 @@ sub readSpreadsheet { # Reads in spreadsheet and populates supplied hash referen
 	my $index;
 	my $columns = $#{$rows[$minRow-1]};
 	for my $i (0 .. $#{$rows[$minRow-1]}) {
-		next unless lc($rows[$minRow-1][$i]) eq lc($ipColumnName);
+		next unless $rows[$minRow-1][$i] eq $ipColumnName;
 		$index = $i; # Holds the column index of the designated switch IP column
 	}
-	quit(1, "Did not find column labeled '$ipColumnName' in spreadsheet '$filename'") unless defined $index;
+	quit(1, "Did not find column labeled '$ipColumnName' in spreadsheet '$filename' (note case-sensitive)") unless defined $index;
 	foreach my $i ($minRow .. $#rows) {
 		next unless length $rows[$i][$index]; # Skip rows with no switch ip/hostname
 		foreach my $j (0 .. $columns) {
 			my $value = $rows[$i][$j];
 			$value = '"'.$value.'"' if $value =~ /\s/ && $value !~ /^\"[^\"]+\"$/; # Quote value if it contains spaces
-			$sheetTable{$rows[$i][$index]}{lc $rows[$minRow-1][$j]} = $value;
+			$sheetTable{$rows[$i][$index]}{$rows[$minRow-1][$j]} = $value;
 		}
 	}
 	return (\%sheetTable, $rows[$minRow-1]);
@@ -454,7 +468,7 @@ sub ftpQuit { # Handles FTP disconnect and passing error message if provided
 }
 
 sub ftpThread { # FTP Thread to each device
-	my ($tnum, $host, $remotePath, $transferMode, $regexRef, $globsRef, $multipleHosts, $globOrMany) = @_;
+	my ($tnum, $host, $remotePath, $transferMode, $regexRef, $globsRef, $multipleHosts, $globOrMany, $spreadsheet, $opt_v) = @_;
 	my ($fnum, $filehost, $port);
 	($host, $port) = splitHostPort($host);
 	($filehost = $host) =~ s/:/_/g; # Produce a suitable filename for IPv6 addresses or [<ip>]:<port>
@@ -490,47 +504,68 @@ sub ftpThread { # FTP Thread to each device
 	# Get/Put files
 	if ($transferMode eq 'get') {
 		my @matchFiles;
+		my @bangFiles;
+		my @tupleFiles; # Each array entry is an array ref [remoteFile, localFile]
 		if ($globOrMany) { # Do an ls on host to see what files we'll be getting
 			my @remoteFiles = $ftp->ls or return ftpQuit($ftp, "Retrieving ls failed: ".$ftp->message);
 			foreach my $fileRegex (@$regexRef) {
-				push(@matchFiles, grep(/$fileRegex/, @remoteFiles));
+				$fileRegex =~ s/^\^!/^/ ? push(@bangFiles, grep(/$fileRegex/, @remoteFiles)) : push(@matchFiles, grep(/$fileRegex/, @remoteFiles));
 			}
 		}
 		else { # Just get the single file (not a glob)
-			push(@matchFiles, $globsRef->[0]);
+			$globsRef->[0] =~ s/^!// ? push(@bangFiles, $globsRef->[0]) : push(@matchFiles, $globsRef->[0]);
 		}
-		foreach my $remoteFile (@matchFiles) {
+		foreach my $file (@matchFiles) {
+			$multipleHosts ? push(@tupleFiles, [$file, "${filehost}_$file"]) : push(@tupleFiles, [$file, $file]);
+		}
+		foreach my $file (@bangFiles) {
+			exists $spreadsheet->{$file} ? push(@tupleFiles, [$file, $spreadsheet->{$file}]) : (
+				$multipleHosts ? push(@tupleFiles, [$file, "${filehost}_$file"]) : push(@tupleFiles, [$file, $file])
+			);
+		}
+		foreach my $tupleRef (@tupleFiles) {
 			$fnum++;
-			if ($multipleHosts) { # Getting from multiple hosts
-				my $localFile = "${filehost}_$remoteFile";
-				$ftp->get($remoteFile, $localFile) or return ftpQuit($ftp, "Get failed: ".$ftp->message);
-			}
-			else { # Get from 1 host only
-				$ftp->get($remoteFile) or return ftpQuit($ftp, "Get failed: ".$ftp->message);
-			}
-			$#matchFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
+			my ($remoteFile, $localFile) = @$tupleRef;
+			sendActivity("\n$tnum - $host: $remoteFile => $localFile  ") if $opt_v && $remoteFile ne $localFile;
+			$ftp->get($remoteFile, $localFile) or return ftpQuit($ftp, "Get failed: $remoteFile: ".$ftp->message);
+			$#tupleFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
 		}
 	}
 	elsif ($transferMode eq 'put') {
-		my @localFiles;
-		if ($multipleHosts) { # Putting to multiple hosts
-			@localFiles = doGlob( map("${filehost}_$_", @$globsRef) );
-			@localFiles = doGlob(@$globsRef) unless scalar @localFiles;
-			foreach my $localFile (@localFiles) {
-				$fnum++;
-				(my $remoteFile = $localFile) =~ s/^${filehost}_//;
-				$ftp->put($localFile, $remoteFile) or return ftpQuit($ftp, "Put failed: ".$ftp->message);
-				$#localFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
+		my @matchFiles;
+		my @tupleFiles; # Each array entry is an array ref [localFile, remoteFile] ; opposite of above
+		foreach my $i (0..$#{$regexRef}) {
+			my @localFiles;
+			my $fileRegex = $regexRef->[$i];
+			(my $globRef = $globsRef->[$i]) =~ s/^!//;
+			if ($fileRegex =~ s/^\^!/^/) {
+				my @xlsFiles = grep(/\.[^\.\s]+$/ && /$fileRegex/, keys %$spreadsheet);
+				foreach my $file (@xlsFiles) {
+					push(@tupleFiles, [$spreadsheet->{$file}, $file]) if -e $spreadsheet->{$file};
+				}
 			}
+			if ($multipleHosts) { # Putting to multiple hosts
+				@localFiles = doGlob( map("${filehost}_$_", ($globRef)));
+				@localFiles = doGlob(($globRef)) unless scalar @localFiles;
+			}
+			else { # Put to 1 host only
+				@localFiles = doGlob(($globRef));
+				@localFiles = doGlob( map("${filehost}_$_", ($globRef)) ) unless scalar @localFiles;
+			}
+			push(@matchFiles, @localFiles) if @localFiles;
 		}
-		else { # Put to 1 host only
-			@localFiles = doGlob(@$globsRef);
-			@localFiles = doGlob( map("${filehost}_$_", @$globsRef) ) unless scalar @localFiles;
-			foreach my $localFile (@localFiles) {
-				$fnum++;
-				$ftp->put($localFile) or return ftpQuit($ftp, "Put failed: ".$ftp->message);
-				$#localFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
-			}
+		foreach my $file (@matchFiles) {
+			my $check = ($file =~ /^${filehost}_(.+)$/);
+			my $basefile = $1 || $file;
+			next if grep($_->[1] eq $basefile, @tupleFiles); # Don't add to tupleFiles if already added from spreadsheet mapping above
+			$check ? push(@tupleFiles, [$file, $1]) : push(@tupleFiles, [$file, $file]);
+		}
+		foreach my $tupleRef (@tupleFiles) {
+			$fnum++;
+			my ($localFile, $remoteFile) = @$tupleRef;
+			sendActivity("\n$tnum - $host: $remoteFile <= $localFile  ") if $opt_v && $localFile ne $remoteFile;
+			$ftp->put($localFile, $remoteFile) or return ftpQuit($ftp, "Put failed: $localFile:]# ".$ftp->message);
+			$#tupleFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
 		}
 	}
 	
@@ -581,7 +616,7 @@ sub sputfile { # Read file locally and write to filehandle
 }
 
 sub sftpThread { # SFTP Thread to each device
-	my ($tnum, $host, $remotePath, $transferMode, $regexRef, $globsRef, $multipleHosts, $globOrMany) = @_;
+	my ($tnum, $host, $remotePath, $transferMode, $regexRef, $globsRef, $multipleHosts, $globOrMany, $spreadsheet, $opt_v) = @_;
 	my ($fnum, $filehost, $port);
 	($host, $port) = splitHostPort($host);
 	($filehost = $host) =~ s/:/_/g; # Produce a suitable filename for IPv6 addresses or [<ip>]:<port>
@@ -612,52 +647,77 @@ sub sftpThread { # SFTP Thread to each device
 	# Get/Put files
 	if ($transferMode eq 'get') {
 		my @matchFiles;
+		my @bangFiles;
+		my @tupleFiles; # Each array entry is an array ref [remoteFile, localFile]
 		if ($globOrMany) { # Do an ls on host to see what files we'll be getting
 			my $sdir = $sftp->opendir($remotePath) or return sftpQuit($ssh2, \$sftp, "Cannot change to directory $remotePath");
 			while(my $item = $sdir->read) {
 				foreach my $fileRegex (@$regexRef) {
-					push(@matchFiles, $item->{name}) if $item->{name} =~ /$fileRegex/;
+					if ((my $localRegex = $fileRegex) =~ s/^\^!/^/) {
+						push(@bangFiles, $item->{name}) if $item->{name} =~ /$localRegex/;
+					}
+					else {
+						push(@matchFiles, $item->{name}) if $item->{name} =~ /$localRegex/;
+					}
 				}
 			}
 		}
 		else { # Just get the single file (not a glob)
-			push(@matchFiles, $globsRef->[0]);
+			$globsRef->[0] =~ s/^!// ? push(@bangFiles, $globsRef->[0]) : push(@matchFiles, $globsRef->[0]);
 		}
-		foreach my $remoteFile (@matchFiles) {
+		foreach my $file (@matchFiles) {
+			$multipleHosts ? push(@tupleFiles, [$file, "${filehost}_$file"]) : push(@tupleFiles, [$file, $file]);
+		}
+		foreach my $file (@bangFiles) {
+			exists $spreadsheet->{$file} ? push(@tupleFiles, [$file, $spreadsheet->{$file}]) : (
+				$multipleHosts ? push(@tupleFiles, [$file, "${filehost}_$file"]) : push(@tupleFiles, [$file, $file])
+			);
+		}
+		foreach my $tupleRef (@tupleFiles) {
 			$fnum++;
+			my ($remoteFile, $localFile) = @$tupleRef;
+			sendActivity("\n$tnum - $host: $remoteFile => $localFile  ") if $opt_v && $remoteFile ne $localFile;
 			my $fh = $sftp->open($remotePath.$remoteFile) or return sftpQuit($ssh2, \$sftp, "Get failed: $remoteFile");
-			if ($multipleHosts) { # Getting from multiple hosts
-				my $localFile = "${filehost}_$remoteFile";
-				sgetfile($fh, $localFile) or return sftpQuit($ssh2, \$sftp, "Get copy failed: $remoteFile");
-			}
-			else { # Get from 1 host only
-				sgetfile($fh, $remoteFile) or return sftpQuit($ssh2, \$sftp, "Get copy failed: $remoteFile");
-			}
-			$#matchFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
+			sgetfile($fh, $localFile) or return sftpQuit($ssh2, \$sftp, "Get copy failed: $remoteFile");
+			$#tupleFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
 		}
 	}
 	elsif ($transferMode eq 'put') {
-		my @localFiles;
-		if ($multipleHosts) { # Putting to multiple hosts
-			@localFiles = doGlob( map("${filehost}_$_", @$globsRef) );
-			@localFiles = doGlob(@$globsRef) unless scalar @localFiles;
-			foreach my $localFile (@localFiles) {
-				$fnum++;
-				(my $remoteFile = $localFile) =~ s/^${filehost}_//;
-				my $fh = $sftp->open($remotePath.$remoteFile, O_WRONLY | O_CREAT | O_TRUNC) or return sftpQuit($ssh2, \$sftp, "Put failed: $remoteFile");
-				sputfile($fh, $localFile) or return sftpQuit($ssh2, \$sftp, "Put copy failed: $remoteFile");
-				$#localFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
+		my @matchFiles;
+		my @tupleFiles; # Each array entry is an array ref [localFile, remoteFile] ; opposite of above
+		foreach my $i (0..$#{$regexRef}) {
+			my @localFiles;
+			my $fileRegex = $regexRef->[$i];
+			(my $globRef = $globsRef->[$i]) =~ s/^!//;
+			if ($fileRegex =~ s/^\^!/^/) {
+				my @xlsFiles = grep(/\.[^\.\s]+$/ && /$fileRegex/, keys %$spreadsheet);
+				foreach my $file (@xlsFiles) {
+					push(@tupleFiles, [$spreadsheet->{$file}, $file]) if -e $spreadsheet->{$file};
+				}
 			}
+			if ($multipleHosts) { # Putting to multiple hosts
+				@localFiles = doGlob( map("${filehost}_$_", ($globRef)));
+				@localFiles = doGlob(($globRef)) unless scalar @localFiles;
+			}
+			else { # Put to 1 host only
+				@localFiles = doGlob(($globRef));
+				@localFiles = doGlob( map("${filehost}_$_", ($globRef)) ) unless scalar @localFiles;
+			}
+			push(@matchFiles, @localFiles) if @localFiles;
 		}
-		else { # Put to 1 host only
-			@localFiles = doGlob(@$globsRef);
-			@localFiles = doGlob( map("${filehost}_$_", @$globsRef) ) unless scalar @localFiles;
-			foreach my $localFile (@localFiles) {
-				$fnum++;
-				my $fh = $sftp->open($remotePath.$localFile, O_WRONLY | O_CREAT | O_TRUNC) or return sftpQuit($ssh2, \$sftp, "Put failed: $localFile");
-				sputfile($fh, $localFile) or return sftpQuit($ssh2, \$sftp, "Put copy failed: $localFile");
-				$#localFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
-			}
+		foreach my $file (@matchFiles) {
+			my $check = ($file =~ /^${filehost}_(.+)$/);
+			my $basefile = $1 || $file;
+			next if grep($_->[1] eq $basefile, @tupleFiles); # Don't add to tupleFiles if already added from spreadsheet mapping above
+			$check ? push(@tupleFiles, [$file, $1]) : push(@tupleFiles, [$file, $file]);
+		}
+		foreach my $tupleRef (@tupleFiles) {
+			$fnum++;
+			my ($localFile, $remoteFile) = @$tupleRef;
+			sendActivity("\n$tnum - $host: $remoteFile <= $localFile  ") if $opt_v && $localFile ne $remoteFile;
+			my $fh = $sftp->open($remotePath.$remoteFile, O_WRONLY | O_CREAT | O_TRUNC) or return sftpQuit($ssh2, \$sftp, "Put failed: $remoteFile");
+			sputfile($fh, $localFile) or return sftpQuit($ssh2, \$sftp, "Put copy failed: $remoteFile");
+			$#tupleFiles ? sendActivity("<$tnum:$fnum>") : sendActivity("<$tnum>");
 		}
 	}
 	
@@ -672,8 +732,8 @@ sub sftpThread { # SFTP Thread to each device
 #############################
 
 MAIN:{
-	my ($aftpProtocol, $aftpMode, @aftpHosts, $aftpPath, @fileGlobs, @fileRegex, %aftpThread, $glob, $globOrMany);
-	getopts('df:p:l:x:');
+	my ($aftpProtocol, $aftpMode, @aftpHosts, $aftpPath, @fileGlobs, @fileRegex, %aftpThread, $glob, $globOrMany, $spreadsheet);
+	getopts('df:p:l:x:v');
 
 	$Debug = 1 if $opt_d;
 	printSyntax if !@ARGV || $ARGV[0] eq '?';
@@ -683,9 +743,10 @@ MAIN:{
 		@aftpHosts = loadHosts($opt_f);
 	}
 	elsif ($opt_x) { # A spreadsheet file
-		printSyntax unless $opt_x =~ /^([^:!\s]+)(?::([^!\s]+))?(?:!(.+))$/;
+		printSyntax unless $opt_x =~ /^([^:!\s]+)(?::([^!\s]+))?!(.+)$/;
 		my ($filename, $sheetname, $deviceLabel) = ($1, $2, $3);
-		@aftpHosts = keys %{(readSpreadsheet($filename, $sheetname, $deviceLabel))[0]};
+		($spreadsheet) = readSpreadsheet($filename, $sheetname, $deviceLabel);
+		@aftpHosts = keys %$spreadsheet;
 	}
 	else {
 		printSyntax unless @ARGV;
@@ -724,6 +785,7 @@ MAIN:{
 	foreach my $fileGlob (@fileGlobs) {
 		quit(1, "Invalid filename/glob") unless length $fileGlob;
 		quit(1, "Invalid filename/glob") if $aftpMode eq 'get' && $fileGlob =~ /[\\\/]/;
+		quit(1, "Cannot use spreadsheet mappings unless the -x option is used") if !$opt_x && $fileGlob =~/^([^:!\s]+)(?::([^!\s]+))?!(.+)$/;
 		print "File glob = $fileGlob\n" if $Debug;
 		# Prepare regular expression glob pattern
 		(my $fileRegex = $fileGlob) =~ s/([\.\$])/\\$1/g;	# Backslash perl's meta characters
@@ -744,7 +806,7 @@ MAIN:{
 	for my $i (0 .. $#aftpHosts) {
 		my $host = $aftpHosts[$i];
 		printf " %2u - %s\n", $i+1, $host;
-		$aftpThread{$host} = threads->create($Thread{$aftpProtocol}, $i+1, $host, $aftpPath, $aftpMode, \@fileRegex, \@fileGlobs, $#aftpHosts, $globOrMany);
+		$aftpThread{$host} = threads->create($Thread{$aftpProtocol}, $i+1, $host, $aftpPath, $aftpMode, \@fileRegex, \@fileGlobs, $#aftpHosts, $globOrMany, $spreadsheet->{$host}, $opt_v);
 	}
 	print "\n";
 

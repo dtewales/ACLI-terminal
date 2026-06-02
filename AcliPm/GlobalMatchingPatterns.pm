@@ -1,6 +1,6 @@
 # ACLI sub-module
 package AcliPm::GlobalMatchingPatterns;
-our $Version = "1.17";
+our $Version = "1.18";
 
 use strict;
 use warnings;
@@ -81,7 +81,7 @@ our @LineClassifyingPatterns = ( # Patterns to classify output lines as banner o
 	['LargeNum', 'R', undef,          0,	=> ' \d{4,} '],
 	['VosSnmp1', 'R', 'PassportERS',  1,	=> '(?:^|\s)(?:snmpv|usm)'],
 	['VosSnmp2', 'R', 'PassportERS',  1,	=> '\s\*{8}\s'], # show snmp-server community
-	['VossLsdb', 'D', 'PassportERS',  1,	=> '^TLV:'],
+	['VossLsdb', 'D', 'PassportERS',  1,	=> '^(?:TLV|\t+\S.*\S):'],
 	['BannText', 'B', undef,          1,	=> '^[A-Z]{3,} '],
 	['Voss-IST', 'R', 'PassportERS',  1,	=> '^v\d+\.\d+ '], # VOSS show vist
 	['VossCore', 'R', 'PassportERS',  1,	=> '^\d+\. '], # VOSS show core

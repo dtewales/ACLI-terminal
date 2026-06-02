@@ -1419,3 +1419,14 @@ Revision history for acli.pl
 	  during connection
 	* Show running-config grep on Fabric Engine with logical-intf names containing the "#" character was not working
 	  properly
+6.05_001
+	* Detection of COM serial ports now uses PowerShell, as WMIC is being deprecated on more recent Windows11
+	* New framework to classify output lines introduced in 6.05 was not correctly classifying lines from VOSS lsdb
+	* Aftp version 1.14:
+	  - Spreadsheet -x option can now be used to rename files as they are downloaded from the device (get) and to
+	    fetch those renamed files when re-uploading them to the same device using the same original name (put); for
+	    this it is sufficient to prepend to the provided filename(s)/glob(s) a bang (!) character: !<filename/glob>
+	  - Spreadsheet -x option column label names are now case sensitive
+	  - Added -v option to provide verbose output where the files being transferred are renamed
+	* Acmd version: 1.09: Spreadsheet -x option column label names are now case sensitive
+	* Added new aliases for VOSS bgp: bgs,upgn,downbgn,bouncebgn,bgnrad,bgnrrx
