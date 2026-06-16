@@ -1,6 +1,6 @@
 # ACLI sub-module
 package AcliPm::Alias;
-our $Version = "1.06";
+our $Version = "1.07";
 
 use strict;
 use warnings;
@@ -253,7 +253,7 @@ sub deRefAliasVar { # Replace alias variables
 			debugMsg(4,"to >$varField<\n");
 			return $varField;
 		}
-		elsif ($varField !~ /^\[.+\]$/) { # This is a mandatory variable
+		elsif ($varOrder <= $alias->{$aliascmd}{MVR}) { # This is a mandatory variable
 			return "££$varOrder££";
 		}
 		else { # This is an optional variable

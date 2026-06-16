@@ -1,6 +1,6 @@
 # ACLI sub-module
 package AcliPm::GlobalMatchingPatterns;
-our $Version = "1.18";
+our $Version = "1.19";
 
 use strict;
 use warnings;
@@ -25,7 +25,7 @@ our $CmdInitiatedPrompt = $Control::CLI::Extreme::CmdInitiatedPrompt;
 #my $VarCapturePortRegex = '(?:^|\s|Port\-?)\K((?:\d{1,2}[\/:]\d{1,2}(?:\/\d{1,2})?(?:\-\d{1,2}(?:[\/:]\d{1,2}(?:\/\d{1,2})?)?)?,)*\d{1,2}[\/:]\d{1,2}(?:\/\d{1,2})?(?:\-\d{1,2}(?:[\/:]\d{1,2}(?:\/\d{1,2})?)?)?|(?:Unit|Slot):\d+ Port: ?\d+|\d\/ \d)(?=\s|$)'; # Using assertions
 #my $VarCapturePortRegex = '(?:^|\s|Port\-?)\K((?:\d{1,3}[\/:]\d{1,2}(?:\/\d{1,2})?(?:\-\d{1,3}(?:[\/:]\d{1,2}(?:\/\d{1,2})?)?)?,)*\d{1,3}[\/:]\d{1,2}(?:\/\d{1,2})?(?:\-\d{1,3}(?:[\/:]\d{1,2}(?:\/\d{1,2})?)?)?|(?:Unit|Slot):\d+ Port: ?\d+|\d\/ \d)(?=\s|$)'; # VPEX slot numbers > 99
 #our $VarCapturePortRegex = '(?:^|\s|Port\-?)\K((?:\d{1,3}[\/:](?:ALL|s\d|\d{1,2}(?:\/\d{1,2})?)(?:\-\d{1,3}(?:[\/:](?:s\d|\d{1,2}(?:\/\d{1,2})?))?)?,)*\d{1,3}[\/:](?:ALL|s\d|\d{1,2}(?:\/\d{1,2})?)(?:\-\d{1,3}(?:[\/:](?:s\d|\d{1,2}(?:\/\d{1,2})?))?)?|(?:Unit|Slot):\d+ Port: ?\d+|\d\/ \d)(?=[\s-]|$)'; # Insight ports & ALL & end with '-' case "show vlan members"
-our $VarCapturePortRegex = '(?:^|\s|Port\-?)\K((?:\d{1,3}[\/:](?:ALL|s\d|\d{1,2}(?:[\/:]\d{1,2})?)(?:\-\d{1,3}(?:[\/:](?:s\d|\d{1,2}(?:[\/:]\d{1,2})?))?)?,)*\d{1,3}[\/:](?:ALL|s\d|\d{1,2}(?:[\/:]\d{1,2})?)(?:\-\d{1,3}(?:[\/:](?:s\d|\d{1,2}(?:[\/:]\d{1,2})?))?)?|(?:Unit|Slot):\d+ Port: ?\d+|\d\/ \d)(?=[\s-]|$)'; # Insight ports & ALL & end with '-' case "show vlan members"
+our $VarCapturePortRegex = '(?:^|\s|Port\-?|:)\K((?:\d{1,3}[\/:](?:ALL|s\d|\d{1,2}(?:[\/:]\d{1,2})?)(?:\-\d{1,3}(?:[\/:](?:s\d|\d{1,2}(?:[\/:]\d{1,2})?))?)?,)*\d{1,3}[\/:](?:ALL|s\d|\d{1,2}(?:[\/:]\d{1,2})?)(?:\-\d{1,3}(?:[\/:](?:s\d|\d{1,2}(?:[\/:]\d{1,2})?))?)?|(?:Unit|Slot):\d+ Port: ?\d+|\d\/ \d)(?=[\s,-]|$)'; # Insight ports & ALL & end with '-' case "show vlan members"
 our $VarCapturePortFormatRegex = '(?:Unit|Slot):(\d+) Port: ?(\d+)';
 
 # Patterns for valid $variables; since these are scattered about and subject to change..
@@ -50,6 +50,7 @@ our @LineClassifyingPatterns = ( # Patterns to classify output lines as banner o
 	# Order of patterns is important
 	['BannHard', 'B', undef,          1,	=> '^(?:[-=\*]{2,}|[#\*]|^Flags ?:)'],
 	['BannBang', 'B', 'OneOS',        0,	=> '^\s*!'],
+	['Bann!ERS', 'B', 'BaystackERS',  0,	=> '^\s*!'],
 	['BannTime', 'B', undef,          1,	=> '^\t+Command Execution Time: '],
 	['BannSock', 'B', undef,          1,	=> '^Output from [^\s:]+:$'],
 	['Config--', 'D', undef,          1,	=> '^(?:config|create|enable)'],

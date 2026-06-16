@@ -1430,3 +1430,11 @@ Revision history for acli.pl
 	  - Added -v option to provide verbose output where the files being transferred are renamed
 	* Acmd version: 1.09: Spreadsheet -x option column label names are now case sensitive
 	* Added new aliases for VOSS bgp: bgs,upgn,downbgn,bouncebgn,bgnrad,bgnrrx
+6.05_002
+	* Capturing of ports to variable was not working for outputs of "show i-sid" which wrap port list/ranges between
+	  ":" and a trailing "," over multiple lines of output
+	* Error checking on command output is also checked immediately after answering Y to a Y/N prompt
+	* Change on how optional/manadatory alias variables are handled; alias optional variables can now be used on
+	  @if/@elsif statements without having to be [] enclosed
+	* "show running-config -b" or alias cfg on BaystackERS was no longer removing banner/comment lines from output;
+	  this was introduced in 6.05 with new classification of lines which was not trained on unfiltered config output

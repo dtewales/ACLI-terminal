@@ -1,6 +1,6 @@
 # acli.pl alias file
 #
-$Version = 1.68
+$Version = 1.69
 #
 # This file was edited with Tab = 8 space characters; set to same on your editor for better viewing
 #
@@ -1921,9 +1921,9 @@ defprt $ports
 										; @echo on
 										; show running-config  -ib||$ports
 
-tuni $ports
+tuni $ports [$isid_name]
 	~:"Create a T-UNI connection between two local ports"
-	?:"Create a T-UNI connection between two local ports\nAlias syntax:\n	tuni <2-ports>\n"
+	?:"Create a T-UNI connection between two local ports\nAlias syntax:\n	tuni <2-ports> [<i-sid name>]\n"
 	{family_type} eq 'PassportERS' && {is_acli} 				= @echo off output off
 										; @my $tuni_*
 										; $tuni_ports = $ports
@@ -1949,6 +1949,9 @@ tuni $ports
 										; 	   no lldp status
 										; 	   no shutdown
 										; 	exit
+										; 	@if $isid_name
+										; 		i-sid name $tuni_isid $isid_name
+										; 	@endif
 										; 	@echo off output on
 										; 	show i-sid $tuni_isid
 										; @else

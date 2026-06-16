@@ -1,6 +1,6 @@
 # ACLI sub-module
 package AcliPm::HandleDeviceOutput;
-our $Version = "1.16";
+our $Version = "1.17";
 
 use strict;
 use warnings;
@@ -1400,6 +1400,7 @@ sub handleDeviceOutput { # Handles reception of output from connectyed device
 			elsif ($mode->{dev_del} eq 'yd') { # Remove echo-ed 'y' after yprompt
 				if ($$outRef =~ s/(?:^|\n)(?:$term_io->{YnPrompt}|Yes|No)\x0d?(\n|$)/$1/) {
 					debugMsg(2,"After-Y-ResponseErase:\n>", $outRef, "<\n");
+					$term_io->{CmdOutputLines} = 0; # Reset this here; sometimes the error message appears after responding Y to y/n prompt
 				}
 				changeMode($mode, {dev_del => 'ds'}, '#HDO21');
 			}

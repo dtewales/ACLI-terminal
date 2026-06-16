@@ -1,6 +1,6 @@
 # ACLI sub-module
 package AcliPm::HandleBufferedOutput;
-our $Version = "1.13";
+our $Version = "1.14";
 
 use strict;
 use warnings;
@@ -1050,8 +1050,10 @@ sub handleBufferedOutput { # Handles how ACLI releases to screen buffered output
 						# Last line is a prompt
 						if ($term_io->{BannerEmptyLine}) {
 							$term_io->{BannerEmptyLine} = 0;
-							debugMsg(2,"Banner empty line restoring on prompt:\n>", \$bohLine, "<\n");
-							printOut($script_io, "\n");
+							unless ($term_io->{EchoOutputOff} && $term_io->{Sourcing}) {
+								debugMsg(2,"Banner empty line restoring on prompt:\n>", \$bohLine, "<\n");
+								printOut($script_io, "\n");
+							}
 						}
 						if (defined $script_io->{CmdLogFH}) {
 							close $script_io->{CmdLogFH};
